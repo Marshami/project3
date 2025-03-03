@@ -1,25 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Mouse Data - Final Interactive Visualization</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8"/>
+  <title>Mouse Temperature Heatmap</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <h1>Nambu-kai – Final Interactive Visualization</h1>
 
-  <p>This project explores minute-by-minute mouse temperature data over 14 days.</p>
-  <p>Select which mice to display below:</p>
-  <div id="mouseToggles"></div>
+  <h1>Nambu-kai — Interactive Mouse Heatmap</h1>
+  <p>This heatmap shows downsampled temperature data for multiple mice over 14 days. 
+  Each row represents one mouse, each column is a time bin (e.g., every 20 minutes), 
+  and the color indicates the average temperature.</p>
 
-  <!-- This div will hold our main visualization -->
-  <div id="finalChart" class="chart-container"></div>
-
-  <!-- If you want extra text or writeup, add it here or link to a separate page -->
+  <div id="mouseToggles"></div>  
+  <div id="heatmap"></div>
 
   <!-- Load D3 -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
-  <!-- Our main JS file -->
   <script src="main.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /* style.css */
 
-/* Basic page styling */
+/* Basic page style */
 body {
     margin: 20px;
     font-family: sans-serif;
@@ -8,49 +8,46 @@ body {
   }
   
   h1 {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
   }
   
-  /* Container spacing for the chart */
-  .chart-container {
+  p {
+    max-width: 600px;
+  }
+  
+  /* Chart container */
+  #heatmap {
     margin-top: 20px;
-    margin-bottom: 40px;
+    position: relative;
   }
   
-  /* Axis styling */
+  /* Axis lines */
   .axis path,
   .axis line {
     stroke: #ccc;
     shape-rendering: crispEdges;
   }
   
-  /* Legend / checkboxes container */
-  #mouseToggles {
-    margin-bottom: 10px;
-  }
-  
-  /* Tooltip styling */
-  div[role="tooltip"] {
-    position: absolute;
-    pointer-events: none;
-    background: rgba(0, 0, 0, 0.7);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    opacity: 0; /* Hidden by default */
-  }
-  
-  /* For the shading of estrus days, if used */
-  .estrus-shading rect {
-    fill: pink;
-    opacity: 0.15;
-  }
-  
-  /* Brush overlay */
+  /* Brush selection styling */
   .brush .selection {
     fill: #777;
     fill-opacity: 0.3;
     stroke: #fff;
-    shape-rendering: crispEdges;
+  }
+  
+  /* Toggle checkboxes container */
+  #mouseToggles label {
+    margin-right: 10px;
+  }
+  
+  /* Tooltip */
+  .heatmap-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    opacity: 0;
   }  
