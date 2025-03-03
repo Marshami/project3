@@ -83,6 +83,7 @@ function updateHeatmap() {
   // Clear old chart
   d3.select("#heatmap").selectAll("*").remove();
 
+  // If none selected
   if (!selected.length) {
     d3.select("#heatmap").append("p").text("No mice selected!");
     return;
@@ -98,7 +99,7 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS & RESET BUTTON & FIXED COLOR (BLUE->RED)
+//    PLUS AXIS LABELS, RESET BUTTON & CORRECTED LEGEND
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
@@ -153,11 +154,9 @@ function createHeatmap(data, selectedMice) {
   // Determine min and max temps
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
 
-  // The color scheme: "RdYlBu" starts with red at t=0, transitions to blue at t=1.
-  // We want min => blue, max => red. Hence domain = [max, min].
-  // That way colorScale(minTemp) => d3.interpolateRdYlBu(1) => blue,
-  // and colorScale(maxTemp) => d3.interpolateRdYlBu(0) => red.
-  // So the scale goes colder=blue -> middle=yellow -> hotter=red.
+  // The color scheme: "RdYlBu" goes red->yellow->blue by default (0->0.5->1).
+  // We want hottest=red => colorScale(maxTemp), coldest=blue => colorScale(minTemp).
+  // So we set domain([maxTemp, minTemp]) => colorScale(maxTemp)=red, colorScale(minTemp)=blue.
   const colorScale = d3.scaleSequential(d3.interpolateRdYlBu)
     .domain([maxTemp, minTemp]);
 
@@ -274,17 +273,16 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND ON THE RIGHT
+  // 4.7) COLOR LEGEND (TOP=RED, BOTTOM=BLUE) TO MATCH THE HEATMAP
   /////////////////////////////////////////////////////////////////////////
-
-  // We'll define the legend scale from cold (min) => hot (max).
-  // But note we've reversed the color scale domain, so we adapt the axis carefully.
-  // We'll show min (blue) at the bottom and max (red) at the top.
   const legendHeight = 200;
-  const legendScale = d3.scaleLinear()
-    .domain([minTemp, maxTemp]) // min at bottom, max at top
-    .range([legendHeight, 0]); 
 
+  // Legend scale: top => maxTemp, bottom => minTemp
+  const legendScale = d3.scaleLinear()
+    .domain([maxTemp, minTemp])  // top->bottom
+    .range([0, legendHeight]);   // 0 at top, 200 at bottom
+
+  // Axis for legend
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
     .tickFormat(d => d.toFixed(1));
@@ -295,26 +293,29 @@ function createHeatmap(data, selectedMice) {
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // Because our colorScale is domain([maxTemp, minTemp]),
-  // we want offset 0 => colorScale(maxTemp)=red, offset 100% => colorScale(minTemp)=blue
-  [maxTemp, minTemp].forEach((t, i) => {
+  // offset=0 => colorScale(maxTemp)=red, offset=100% => colorScale(minTemp)=blue
+  [ [0, maxTemp], [100, minTemp] ].forEach(([offset, val]) => {
     gradient.append("stop")
-      .attr("offset", i === 0 ? "0%" : "100%")
-      .attr("stop-color", colorScale(t));
+      .attr("offset", offset + "%")
+      .attr("stop-color", colorScale(val));
   });
 
+  // Draw the legend
   const legendG = svg.append("g")
     .attr("transform", `translate(${width - margin.right + 30}, ${margin.top})`);
 
+  // The gradient rect
   legendG.append("rect")
     .attr("width", 15)
     .attr("height", legendHeight)
     .style("fill", "url(#tempGradient)");
 
+  // The axis next to the gradient
   legendG.append("g")
     .attr("transform", `translate(15, 0)`)
     .call(legendAxis);
 
+  // Label
   legendG.append("text")
     .attr("x", -15)
     .attr("y", -10)
