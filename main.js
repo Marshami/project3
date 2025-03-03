@@ -9,12 +9,12 @@ let allMice = [];
 d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
   console.log("Rows in CSV:", rawData.length);
 
-  // Tag each row with a 'minute' index
+  // 1.1) Tag each row with a 'minute' index
   rawData.forEach((row, i) => {
     row.minute = i;
   });
 
-  // Convert from wide to long
+  // 1.2) Convert from wide -> long
   rawData.forEach(row => {
     const minuteVal = +row.minute;
     Object.keys(row).forEach(col => {
@@ -83,7 +83,7 @@ function updateHeatmap() {
   // Clear old chart
   d3.select("#heatmap").selectAll("*").remove();
 
-  // If none selected
+  // If none selected, show a message
   if (!selected.length) {
     d3.select("#heatmap").append("p").text("No mice selected!");
     return;
@@ -99,20 +99,20 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS & RESET BUTTON & MATCHED LEGEND
+//    PLUS AXIS LABELS, RESET BUTTON, AND RED-ONLY COLOR LEGEND
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
   // 4.1) DOWNSAMPLE: e.g. 20-minute bins for each (mouseID, binIndex)
   /////////////////////////////////////////////////////////////////////////
-  const binSize = 20; // Adjust as desired
+  const binSize = 20; // Adjust as needed
   const nested = d3.rollups(
     data,
     v => d3.mean(v, d => d.temperature),
     d => d.mouseID,
     d => Math.floor(d.minute / binSize)
   );
-  // => [ [ 'f1', [ [0, avg], [1, avg] ] ], [ 'f2', ...], ...]
+  // => [ [ 'f1', [ [0, avg], [1, avg], ...] ], ['f2', ...], ...]
 
   // Flatten
   let binData = [];
@@ -125,13 +125,12 @@ function createHeatmap(data, selectedMice) {
       });
     });
   });
-  // Sort by binIndex so x positions flow left->right
+  // Sort so we draw from left (lowest binIndex) to right (highest binIndex)
   binData.sort((a,b) => d3.ascending(a.binIndex, b.binIndex));
 
   /////////////////////////////////////////////////////////////////////////
   // 4.2) SCALES
   /////////////////////////////////////////////////////////////////////////
-
   // Sort mice in numeric order => f1, f2, f3, ...
   const miceSorted = selectedMice.slice().sort((a,b) => {
     const numA = parseInt(a.slice(1), 10);
@@ -139,31 +138,31 @@ function createHeatmap(data, selectedMice) {
     return numA - numB;
   });
 
-  // Y-scale (each mouse is a row)
+  // Y-scale: each mouse is one row
   const yScale = d3.scaleBand()
     .domain(miceSorted)
-    .range([0, miceSorted.length * 30]) // 30 px per row
+    .range([0, miceSorted.length * 30])
     .padding(0.1);
 
-  // X-scale (binIndex from min->max)
+  // X-scale: binIndex from min->max
   const xExtent = d3.extent(binData, d => d.binIndex);
   const xScale = d3.scaleLinear()
     .domain(xExtent)
-    .range([0, 1000]); // ~1000 px wide
+    .range([0, 1000]);  // ~1000 px wide
 
-  // Determine min and max temps
+  // Temperature range
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
 
-  // ***Key part***: We want cooler=blue, hotter=red. By default, d3.interpolateRdYlBu(0)=red, (1)=blue.
-  // So we reverse it with a custom interpolator "t => d3.interpolateRdYlBu(1 - t)" for domain [minTemp, maxTemp].
-  const colorScale = d3.scaleSequential(t => d3.interpolateRdYlBu(1 - t))
+  // Use d3.interpolateReds for a single red color scale
+  // minTemp => a lighter red/pink, maxTemp => a deep dark red
+  const colorScale = d3.scaleSequential(d3.interpolateReds)
     .domain([minTemp, maxTemp]);
 
   /////////////////////////////////////////////////////////////////////////
   // 4.3) CREATE SVG & AXES
   /////////////////////////////////////////////////////////////////////////
   const margin = { top: 50, right: 100, bottom: 60, left: 80 };
-  const chartWidth = 1000;   // Must match xScale.range()[1]
+  const chartWidth = 1000;
   const chartHeight = yScale.range()[1];
   const width = chartWidth + margin.left + margin.right;
   const height = chartHeight + margin.top + margin.bottom;
@@ -180,6 +179,7 @@ function createHeatmap(data, selectedMice) {
   const xAxis = d3.axisBottom(xScale)
     .ticks(10)
     .tickFormat(d => d * binSize);
+
   g.append("g")
     .attr("class", "x-axis")
     .attr("transform", `translate(0,${chartHeight})`)
@@ -196,9 +196,7 @@ function createHeatmap(data, selectedMice) {
 
   // y-axis
   const yAxis = d3.axisLeft(yScale);
-  g.append("g")
-    .attr("class", "y-axis")
-    .call(yAxis);
+  g.append("g").attr("class", "y-axis").call(yAxis);
 
   // y-axis label
   g.append("text")
@@ -235,8 +233,8 @@ function createHeatmap(data, selectedMice) {
     .attr("class", "heatmap-cells")
     .attr("clip-path", "url(#chart-clip)");
 
-  const rectW = xScale(1) - xScale(0); // width of one bin
-  const rects = chartG.selectAll("rect.heat-cell")
+  const rectW = xScale(1) - xScale(0);
+  chartG.selectAll("rect.heat-cell")
     .data(binData)
     .enter()
     .append("rect")
@@ -255,7 +253,7 @@ function createHeatmap(data, selectedMice) {
     .attr("class", "heatmap-tooltip")
     .style("opacity", 0);
 
-  rects
+  chartG.selectAll("rect.heat-cell")
     .on("mouseover", (evt, d) => {
       tooltip.style("opacity", 1)
         .html(`Mouse: <b>${d.mouseID}</b><br>
@@ -272,28 +270,27 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND (HOT=RED at TOP, COLD=BLUE at BOTTOM)
+  // 4.7) COLOR LEGEND (LIGHT RED => DARK RED)
   /////////////////////////////////////////////////////////////////////////
   const legendHeight = 200;
 
-  // We'll treat the top of the legend as the hottest (maxTemp), the bottom as the coldest (minTemp).
-  // So domain is [maxTemp, minTemp] => 0 => top, 200 => bottom
+  // We want top=high temp => darkest red, bottom=low temp => light red
+  // domain => [maxTemp, minTemp] => range => [0, legendHeight]
   const legendScale = d3.scaleLinear()
-    .domain([maxTemp, minTemp])  // top->bottom
-    .range([0, legendHeight]);   // 0 at top, 200 at bottom
+    .domain([maxTemp, minTemp])  // top -> bottom
+    .range([0, legendHeight]);
 
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
     .tickFormat(d => d.toFixed(1));
 
-  // The gradient definition
   const defsLegend = svg.append("defs");
   const gradient = defsLegend.append("linearGradient")
     .attr("id", "tempGradient")
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // offset=0 => colorScale(maxTemp)=red, offset=100 => colorScale(minTemp)=blue
+  // offset=0 => colorScale(maxTemp)=darkest red, offset=100 => colorScale(minTemp)=light red
   [ [0, maxTemp], [100, minTemp] ].forEach(([offset, val]) => {
     gradient.append("stop")
       .attr("offset", offset + "%")
@@ -303,11 +300,13 @@ function createHeatmap(data, selectedMice) {
   const legendG = svg.append("g")
     .attr("transform", `translate(${width - margin.right + 30}, ${margin.top})`);
 
+  // The gradient rect
   legendG.append("rect")
     .attr("width", 15)
     .attr("height", legendHeight)
     .style("fill", "url(#tempGradient)");
 
+  // The axis next to the gradient
   legendG.append("g")
     .attr("transform", `translate(15, 0)`)
     .call(legendAxis);
@@ -344,7 +343,7 @@ function createHeatmap(data, selectedMice) {
     g.select(".x-axis")
       .call(d3.axisBottom(xScale).ticks(5).tickFormat(d => Math.round(d * binSize)));
 
-    // Reposition rects (within the clip)
+    // Reposition rects
     chartG.selectAll("rect.heat-cell")
       .attr("x", d => xScale(d.binIndex))
       .attr("width", xScale(1) - xScale(0));
