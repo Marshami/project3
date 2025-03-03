@@ -1,74 +1,73 @@
 // main.js
 
-// 1) LOAD CSV & TRANSFORM
+// 1) Load the CSV in "wide" format and transform to "long" format
 d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
-    // rawData is an array of objects. Each object has keys f1,f2,...,f13 and values as strings.
-  
-    // We add "minute" as the row index (0, 1, 2, ...) so we know time steps
+    // Each element in rawData is an object with keys like f1,f2,...,f13 (for example).
+    // We'll add a 'minute' property based on the row index:
     rawData.forEach((row, i) => {
-      row.minute = i; // or i+1 if you prefer 1-based
+      row.minute = i; // zero-based index = "time"
     });
   
-    // WIDE -> LONG
-    // For each row, we create a new object for each mouse column (f1, f2, etc.)
-    let longData = [];
+    // Convert from wide to long
+    // For each row, each "fX" becomes a new record: { mouseID: "fX", minute, temperature }
+    const longData = [];
     rawData.forEach(row => {
-      // minute is row.minute
-      // each fN is row["fN"]
-      // We iterate over all columns except 'minute'
+      const minuteVal = +row.minute; // convert to number
+      // Loop over all keys in this row
       Object.keys(row).forEach(col => {
-        // Skip the 'minute' property and any undefined
-        if (col === "minute" || row[col] === undefined) return;
-  
-        longData.push({
-          mouseID: col,                // e.g., 'f1'
-          minute: +row.minute,         // integer minute
-          temperature: +row[col]       // convert string to number
-        });
+        if (col === "minute") return; // skip the minute field itself
+        const val = row[col];
+        if (val !== undefined && val !== "") {
+          longData.push({
+            mouseID: col,
+            minute: minuteVal,
+            temperature: +val // parse string to number
+          });
+        }
       });
     });
   
-    // Now longData has objects like:
-    // { mouseID: "f1", minute: 0, temperature: 37.11 }, ...
+    // Now we have an array of records: 
+    // { mouseID: 'f1', minute: 0, temperature: 37.11 }, etc.
   
-    // 2) CREATE A MULTI-LINE CHART
+    // Build the chart
     createMultiLineChart(longData);
   
-  }).catch(err => {
-    console.error("Error loading CSV:", err);
+  }).catch(error => {
+    console.error("Error loading CSV:", error);
   });
   
   
-  // FUNCTION: CREATE MULTI-LINE CHART
+  // 2) Multi-Line Chart Function
   function createMultiLineChart(data) {
-    // Dimensions
-    const width = 800,
-          height = 400,
-          margin = { top: 40, right: 120, bottom: 50, left: 60 };
-  
+    // Chart dimensions
+    const width = 800;
+    const height = 400;
+    const margin = { top: 40, right: 120, bottom: 50, left: 60 };
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
   
-    // Append SVG
+    // Create SVG
     const svg = d3.select("#chart")
       .append("svg")
       .attr("width", width)
       .attr("height", height);
   
+    // Main group to hold chart elements
     const g = svg.append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
   
-    // We want one line per "mouseID"
-    // 1) Group data by mouseID
+    // Group data by mouseID
     const nested = d3.groups(data, d => d.mouseID);
-    // nested is an array of [ [mouseID, arrayOfRecords], ... ]
+    // nested = [ [ 'f1', [ {mouseID:'f1', minute:..., temperature:...}, ... ] ],
+    //            [ 'f2', [ ... ] ],
+    //            ... ]
   
-    // 2) Determine x/y domains
-    // x domain: minute from 0 to max
+    // Determine the domain for x (minute) and y (temperature)
     const xExtent = d3.extent(data, d => d.minute);
-    // y domain: temperature range
     const yExtent = d3.extent(data, d => d.temperature);
   
+    // Scales
     const xScale = d3.scaleLinear()
       .domain(xExtent)
       .range([0, innerWidth]);
@@ -78,74 +77,59 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
       .range([innerHeight, 0])
       .nice();
   
-    // 3) Create a color scale for each mouse
-    // We'll use D3's category10 for variety, or pick your own palette
-    const mouseIDs = nested.map(([mouseID]) => mouseID);
+    // Color scale for each mouse line
+    const mouseIDs = nested.map(([mID]) => mID); // ['f1','f2','f3',...]
     const colorScale = d3.scaleOrdinal()
       .domain(mouseIDs)
       .range(d3.schemeCategory10);
   
-    // 4) Line generator
+    // Line generator
     const lineGen = d3.line()
       .x(d => xScale(d.minute))
       .y(d => yScale(d.temperature));
   
-    // 5) Draw a <path> for each mouse group
-    nested.forEach(([mouseID, records]) => {
-      // Sort records by minute if not already sorted
-      records.sort((a,b) => d3.ascending(a.minute, b.minute));
+    // Draw a path for each mouse
+    nested.forEach(([mID, records]) => {
+      // Sort by minute so the line goes left to right
+      records.sort((a, b) => d3.ascending(a.minute, b.minute));
   
       g.append("path")
         .datum(records)
         .attr("fill", "none")
-        .attr("stroke", colorScale(mouseID))
+        .attr("stroke", colorScale(mID))
         .attr("stroke-width", 1.5)
-        .attr("d", lineGen)
-        .attr("opacity", 0.9);
+        .attr("opacity", 0.9)
+        .attr("d", lineGen);
     });
   
-    // 6) Axes
-    const xAxis = d3.axisBottom(xScale).ticks(10);
+    // Axes
+    const xAxis = d3.axisBottom(xScale)
+      .ticks(10)
+      .tickFormat(d => d);
+  
     const yAxis = d3.axisLeft(yScale).ticks(6);
   
     g.append("g")
-      .attr("transform", `translate(0, ${innerHeight})`)
+      .attr("class", "axis")
+      .attr("transform", `translate(0,${innerHeight})`)
       .call(xAxis)
       .append("text")
       .attr("x", innerWidth / 2)
-      .attr("y", 40)
+      .attr("y", 35)
       .attr("fill", "black")
       .attr("text-anchor", "middle")
       .text("Minute");
   
     g.append("g")
+      .attr("class", "axis")
       .call(yAxis)
       .append("text")
       .attr("x", -innerHeight / 2)
-      .attr("y", -50)
+      .attr("y", -45)
       .attr("fill", "black")
       .attr("text-anchor", "middle")
       .attr("transform", "rotate(-90)")
       .text("Temperature (°C)");
-  
-    // 7) Optional: Add a legend for each mouse
-    const legend = svg.append("g")
-      .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
-  
-    mouseIDs.forEach((mID, i) => {
-      const yPos = i * 20; 
-      legend.append("rect")
-        .attr("x", 0)
-        .attr("y", yPos)
-        .attr("width", 12)
-        .attr("height", 12)
-        .attr("fill", colorScale(mID));
-      legend.append("text")
-        .attr("x", 20)
-        .attr("y", yPos + 10)
-        .style("font-size", "12px")
-        .text(mID);
-    });
   
     // Title
     g.append("text")
@@ -154,4 +138,28 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
       .attr("text-anchor", "middle")
       .style("font-size", "16px")
       .text("Mouse Temperatures Over Time");
-  }
+  
+    // Simple legend on the right side
+    const legend = svg.append("g")
+      .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
+  
+    mouseIDs.forEach((mID, i) => {
+      const yPos = i * 20;
+      // color box
+      legend.append("rect")
+        .attr("class", "legend-rect")
+        .attr("x", 0)
+        .attr("y", yPos)
+        .attr("width", 12)
+        .attr("height", 12)
+        .attr("fill", colorScale(mID));
+  
+      // label text
+      legend.append("text")
+        .attr("class", "legend-item")
+        .attr("x", 20)
+        .attr("y", yPos + 10)
+        .style("font-size", "12px")
+        .text(mID);
+    });
+  }  
