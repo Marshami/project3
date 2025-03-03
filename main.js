@@ -40,7 +40,7 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
   // Build checkboxes
   createMouseToggles(allMice);
 
-  // Initially render the heatmap with all mice
+  // Render the heatmap initially with all mice
   updateHeatmap();
 
 }).catch(err => {
@@ -98,7 +98,7 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS & RESET BUTTON
+//    PLUS AXIS LABELS & RESET BUTTON & FIXED LEGEND
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
@@ -150,11 +150,12 @@ function createHeatmap(data, selectedMice) {
     .domain(xExtent)
     .range([0, 1000]); // ~1000 px wide
 
-  // Color scale (temp)
+  // Color scale (temp) -- not reversed domain now
+  // So min => "cooler" color, max => "warmer" color
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
   const colorScale = d3.scaleSequential(d3.interpolateSpectral)
-    .domain([maxTemp, minTemp]); 
-    // reversed for typical "cool -> warm" color scheme
+    .domain([minTemp, maxTemp]); 
+    // this ensures the entire range shows from cool (blue) to warm (red)
 
   /////////////////////////////////////////////////////////////////////////
   // 4.3) CREATE SVG & AXES
@@ -269,12 +270,15 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND ON THE RIGHT
+  // 4.7) COLOR LEGEND ON THE RIGHT (FULL RANGE)
   /////////////////////////////////////////////////////////////////////////
   const legendHeight = 200;
+  // Now define domain as [minTemp, maxTemp] in ascending order
   const legendScale = d3.scaleLinear()
-    .domain([maxTemp, minTemp])
-    .range([0, legendHeight]);
+    .domain([minTemp, maxTemp])
+    .range([legendHeight, 0]); 
+    // top=lowest temp, bottom=highest temp
+
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
     .tickFormat(d => d.toFixed(1));
@@ -285,6 +289,8 @@ function createHeatmap(data, selectedMice) {
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
+  // We go from top => minTemp, bottom => maxTemp
+  // so 0% => colorScale(minTemp), 100% => colorScale(maxTemp)
   [minTemp, maxTemp].forEach((t, i) => {
     gradient.append("stop")
       .attr("offset", i === 0 ? "0%" : "100%")
@@ -313,7 +319,7 @@ function createHeatmap(data, selectedMice) {
   // 4.8) BRUSH FOR HORIZONTAL ZOOM (+ STORED INITIAL DOMAIN & RESET)
   /////////////////////////////////////////////////////////////////////////
 
-  // Store the initial domain so we can reset later
+  // Save the initial domain for reset
   const initialDomain = xScale.domain();
 
   const brush = d3.brushX()
@@ -349,7 +355,6 @@ function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
   // 4.9) RESET ZOOM BUTTON
   /////////////////////////////////////////////////////////////////////////
-  // We'll place it below the chart in the same #heatmap container
   d3.select("#heatmap").append("button")
     .attr("id", "resetZoomBtn")
     .style("margin-top", "10px")
