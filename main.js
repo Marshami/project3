@@ -99,7 +99,7 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS, RESET BUTTON & CORRECTED LEGEND
+//    PLUS AXIS LABELS & RESET BUTTON & MATCHED LEGEND
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
@@ -154,11 +154,10 @@ function createHeatmap(data, selectedMice) {
   // Determine min and max temps
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
 
-  // The color scheme: "RdYlBu" goes red->yellow->blue by default (0->0.5->1).
-  // We want hottest=red => colorScale(maxTemp), coldest=blue => colorScale(minTemp).
-  // So we set domain([maxTemp, minTemp]) => colorScale(maxTemp)=red, colorScale(minTemp)=blue.
-  const colorScale = d3.scaleSequential(d3.interpolateRdYlBu)
-    .domain([maxTemp, minTemp]);
+  // ***Key part***: We want cooler=blue, hotter=red. By default, d3.interpolateRdYlBu(0)=red, (1)=blue.
+  // So we reverse it with a custom interpolator "t => d3.interpolateRdYlBu(1 - t)" for domain [minTemp, maxTemp].
+  const colorScale = d3.scaleSequential(t => d3.interpolateRdYlBu(1 - t))
+    .domain([minTemp, maxTemp]);
 
   /////////////////////////////////////////////////////////////////////////
   // 4.3) CREATE SVG & AXES
@@ -273,49 +272,46 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND (TOP=RED, BOTTOM=BLUE) TO MATCH THE HEATMAP
+  // 4.7) COLOR LEGEND (HOT=RED at TOP, COLD=BLUE at BOTTOM)
   /////////////////////////////////////////////////////////////////////////
   const legendHeight = 200;
 
-  // Legend scale: top => maxTemp, bottom => minTemp
+  // We'll treat the top of the legend as the hottest (maxTemp), the bottom as the coldest (minTemp).
+  // So domain is [maxTemp, minTemp] => 0 => top, 200 => bottom
   const legendScale = d3.scaleLinear()
     .domain([maxTemp, minTemp])  // top->bottom
     .range([0, legendHeight]);   // 0 at top, 200 at bottom
 
-  // Axis for legend
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
     .tickFormat(d => d.toFixed(1));
 
-  const defs = svg.append("defs");
-  const gradient = defs.append("linearGradient")
+  // The gradient definition
+  const defsLegend = svg.append("defs");
+  const gradient = defsLegend.append("linearGradient")
     .attr("id", "tempGradient")
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // offset=0 => colorScale(maxTemp)=red, offset=100% => colorScale(minTemp)=blue
+  // offset=0 => colorScale(maxTemp)=red, offset=100 => colorScale(minTemp)=blue
   [ [0, maxTemp], [100, minTemp] ].forEach(([offset, val]) => {
     gradient.append("stop")
       .attr("offset", offset + "%")
       .attr("stop-color", colorScale(val));
   });
 
-  // Draw the legend
   const legendG = svg.append("g")
     .attr("transform", `translate(${width - margin.right + 30}, ${margin.top})`);
 
-  // The gradient rect
   legendG.append("rect")
     .attr("width", 15)
     .attr("height", legendHeight)
     .style("fill", "url(#tempGradient)");
 
-  // The axis next to the gradient
   legendG.append("g")
     .attr("transform", `translate(15, 0)`)
     .call(legendAxis);
 
-  // Label
   legendG.append("text")
     .attr("x", -15)
     .attr("y", -10)
