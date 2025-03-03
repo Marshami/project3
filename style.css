@@ -1,25 +1,35 @@
 /* style.css */
 
-/* Basic resets */
+/* Basic layout/styling */
 body {
     margin: 20px;
     font-family: sans-serif;
     background: #fafafa;
   }
   
-  /* A little space for the chart container */
-  #chart {
-    margin-top: 20px;
+  h1, h2, h3 {
+    font-weight: normal;
+    margin-bottom: 0.5rem;
   }
   
-  /* Axis lines, ticks, etc. */
+  p {
+    margin-top: 0.25rem;
+    margin-bottom: 1rem;
+  }
+  
+  /* For chart containers */
+  .chart-container {
+    margin-bottom: 40px;
+  }
+  
+  /* Axes lines/ticks for all charts */
   .axis path,
   .axis line {
     stroke: #ccc;
     shape-rendering: crispEdges;
   }
   
-  /* Legend styles */
+  /* Legend styling */
   .legend-rect {
     width: 12px;
     height: 12px;

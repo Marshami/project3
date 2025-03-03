@@ -2,14 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Mouse Data - Multi-Line Chart</title>
-  <!-- Link to external CSS -->
+  <title>Mouse Data Exploratory Visualizations</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Mouse Temperature Over Time (Multi-Line D3 Example)</h1>
-  <!-- Container for the chart -->
-  <div id="chart"></div>
+  <h1>Exploratory Graphs for Mouse Data</h1>
+  <p><strong>Team Name:</strong> Inoue-gumi</p>
+  <p><strong>Dataset Chosen:</strong> Mouse Data (Temperatures, 14 days, 13 mice)</p>
+  <p><strong>Aspects to Explore:</strong> Variation across mice, time of day (minute), potential day/night patterns, average vs. time‐dependent temperature, etc.</p>
+
+  <h2>1. Multi‐Line Chart (All Mice)</h2>
+  <div id="chart1" class="chart-container"></div>
+
+  <h2>2. Single Mouse Line Chart</h2>
+  <div id="chart2" class="chart-container"></div>
+
+  <h2>3. Bar Chart: Average Temperature by Mouse</h2>
+  <div id="chart3" class="chart-container"></div>
+
+  <h2>4. Day vs. Night Comparison (Single Mouse)</h2>
+  <div id="chart4" class="chart-container"></div>
+
+  <h2>5. “Mini‐Progress” Interactive Chart (Brush/Zoom Prototype)</h2>
+  <div id="chart5" class="chart-container"></div>
+
+  <h3>The Question / Hypothesis</h3>
+  <p>
+    A question that arises from these explorations could be: 
+    <em>“How does temperature vary across these 13 mice over a 14‐day cycle, 
+    and are there distinct day/night or cyclical patterns that might align with estrus cycles?”</em>
+  </p>
+
+  <h3>Current Progress on Final Dynamic Graph</h3>
+  <p>
+    Below is a partial brush/zoom chart (Chart #5) that shows we can focus on sub‐ranges of time. 
+    Further improvements (e.g., advanced tooltips, overlays highlighting estrus days) are still in progress.
+  </p>
 
   <!-- Load D3 -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
