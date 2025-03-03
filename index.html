@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mouse Data Multi-Line Chart</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    .axis path,
+    .axis line {
+      stroke: #ccc;
+      shape-rendering: crispEdges;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mouse Temperature Over Time (Multiple Lines)</h1>
+  <!-- The chart will go in this div -->
+  <div id="chart"></div>
+
+  <!-- Load D3 -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- Your custom JS -->
+  <script src="main.js"></script>
+</body>
+</html>
