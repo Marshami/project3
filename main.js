@@ -1,7 +1,7 @@
 // main.js
 
 ////////////////////////////////////////////////////////////////////////
-// 1) LOAD THE WIDE CSV, TRANSFORM TO LONG, AND STORE IN GLOBAL ARRAYS
+// 1) LOAD CSV, TRANSFORM (WIDE->LONG), AND STORE IN GLOBAL ARRAYS
 ////////////////////////////////////////////////////////////////////////
 let fullData = [];
 let allMice = [];
@@ -14,7 +14,7 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
     row.minute = i;
   });
 
-  // WIDE -> LONG
+  // Convert from wide to long
   rawData.forEach(row => {
     const minuteVal = +row.minute;
     Object.keys(row).forEach(col => {
@@ -40,7 +40,7 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
   // Build checkboxes
   createMouseToggles(allMice);
 
-  // Render the heatmap initially with all mice
+  // Initially render the heatmap with all mice
   updateHeatmap();
 
 }).catch(err => {
@@ -83,7 +83,6 @@ function updateHeatmap() {
   // Clear old chart
   d3.select("#heatmap").selectAll("*").remove();
 
-  // If none selected
   if (!selected.length) {
     d3.select("#heatmap").append("p").text("No mice selected!");
     return;
@@ -98,11 +97,12 @@ function updateHeatmap() {
 
 
 //////////////////////////////////////////////////////////////
-// 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP
+// 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
+//    PLUS AXIS LABELS & RESET BUTTON
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
-  // 4.1) DOWNSAMPLE: e.g., 20-minute bins for each (mouseID, binIndex)
+  // 4.1) DOWNSAMPLE: e.g. 20-minute bins for each (mouseID, binIndex)
   /////////////////////////////////////////////////////////////////////////
   const binSize = 20; // Adjust as desired
   const nested = d3.rollups(
@@ -131,9 +131,9 @@ function createHeatmap(data, selectedMice) {
   // 4.2) SCALES
   /////////////////////////////////////////////////////////////////////////
 
-  // Sort mice in numeric order so "f2" doesn't come after "f10"
+  // Sort mice in numeric order => f1, f2, f3, ...
   const miceSorted = selectedMice.slice().sort((a,b) => {
-    const numA = parseInt(a.slice(1), 10); // e.g. "f1" => 1
+    const numA = parseInt(a.slice(1), 10);
     const numB = parseInt(b.slice(1), 10);
     return numA - numB;
   });
@@ -159,7 +159,7 @@ function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
   // 4.3) CREATE SVG & AXES
   /////////////////////////////////////////////////////////////////////////
-  const margin = { top: 50, right: 100, bottom: 50, left: 80 };
+  const margin = { top: 50, right: 100, bottom: 60, left: 80 };
   const chartWidth = 1000;   // Must match xScale.range()[1]
   const chartHeight = yScale.range()[1];
   const width = chartWidth + margin.left + margin.right;
@@ -182,11 +182,30 @@ function createHeatmap(data, selectedMice) {
     .attr("transform", `translate(0,${chartHeight})`)
     .call(xAxis);
 
+  // x-axis label
+  g.append("text")
+    .attr("class", "x-axis-label")
+    .attr("x", chartWidth / 2)
+    .attr("y", chartHeight + 40)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Time (binned minutes)");
+
   // y-axis
   const yAxis = d3.axisLeft(yScale);
   g.append("g")
     .attr("class", "y-axis")
     .call(yAxis);
+
+  // y-axis label
+  g.append("text")
+    .attr("class", "y-axis-label")
+    .attr("x", -chartHeight / 2)
+    .attr("y", -55)
+    .attr("transform", "rotate(-90)")
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px")
+    .text("Mouse IDs");
 
   // Title
   g.append("text")
@@ -197,7 +216,7 @@ function createHeatmap(data, selectedMice) {
     .text("Interactive Mouse Temperatures Over 14 Days");
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.4) DEFINE A CLIP PATH TO PREVENT OVERLAP
+  // 4.4) DEFINE A CLIP PATH TO PREVENT OVERLAP WHEN ZOOMING
   /////////////////////////////////////////////////////////////////////////
   svg.append("defs")
     .append("clipPath")
@@ -291,8 +310,12 @@ function createHeatmap(data, selectedMice) {
     .text("Temp (°C)");
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.8) BRUSH FOR HORIZONTAL ZOOM (clip ensures rects won't overlap)
+  // 4.8) BRUSH FOR HORIZONTAL ZOOM (+ STORED INITIAL DOMAIN & RESET)
   /////////////////////////////////////////////////////////////////////////
+
+  // Store the initial domain so we can reset later
+  const initialDomain = xScale.domain();
+
   const brush = d3.brushX()
     .extent([[0, 0], [chartWidth, chartHeight]])
     .on("end", brushed);
@@ -314,12 +337,36 @@ function createHeatmap(data, selectedMice) {
     g.select(".x-axis")
       .call(d3.axisBottom(xScale).ticks(5).tickFormat(d => Math.round(d * binSize)));
 
-    // Reposition rects (clipped)
+    // Reposition rects (within the clip)
     chartG.selectAll("rect.heat-cell")
       .attr("x", d => xScale(d.binIndex))
       .attr("width", xScale(1) - xScale(0));
 
     // Clear brush
     g.select(".brush").call(brush.move, null);
+  }
+
+  /////////////////////////////////////////////////////////////////////////
+  // 4.9) RESET ZOOM BUTTON
+  /////////////////////////////////////////////////////////////////////////
+  // We'll place it below the chart in the same #heatmap container
+  d3.select("#heatmap").append("button")
+    .attr("id", "resetZoomBtn")
+    .style("margin-top", "10px")
+    .text("Reset Zoom")
+    .on("click", resetZoom);
+
+  function resetZoom() {
+    // Restore the xScale domain
+    xScale.domain(initialDomain);
+
+    // Redraw x-axis
+    g.select(".x-axis")
+      .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => d * binSize));
+
+    // Re-draw rects
+    chartG.selectAll("rect.heat-cell")
+      .attr("x", d => xScale(d.binIndex))
+      .attr("width", xScale(1) - xScale(0));
   }
 }
