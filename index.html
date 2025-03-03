@@ -2,46 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Mouse Data Exploratory Visualizations</title>
+  <title>Mouse Data - Final Interactive Visualization</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Exploratory Graphs for Mouse Data</h1>
-  <p><strong>Team Name:</strong> Nambu-kai</p>
-  <p><strong>Dataset Chosen:</strong> Mouse Data (Temperatures, 14 days, 13 mice)</p>
-  <p><strong>Aspects to Explore:</strong> Variation across mice, time of day (minute), potential day/night patterns, average vs. time‐dependent temperature, etc.</p>
+  <h1>Nambu-kai – Final Interactive Visualization</h1>
 
-  <h2>1. Multi‐Line Chart (All Mice)</h2>
-  <div id="chart1" class="chart-container"></div>
+  <p>This project explores minute-by-minute mouse temperature data over 14 days.</p>
+  <p>Select which mice to display below:</p>
+  <div id="mouseToggles"></div>
 
-  <h2>2. Single Mouse Line Chart</h2>
-  <div id="chart2" class="chart-container"></div>
+  <!-- This div will hold our main visualization -->
+  <div id="finalChart" class="chart-container"></div>
 
-  <h2>3. Bar Chart: Average Temperature by Mouse</h2>
-  <div id="chart3" class="chart-container"></div>
-
-  <h2>4. Day vs. Night Comparison (Single Mouse)</h2>
-  <div id="chart4" class="chart-container"></div>
-
-  <h2>5. “Mini‐Progress” Interactive Chart (Brush/Zoom Prototype)</h2>
-  <div id="chart5" class="chart-container"></div>
-
-  <h3>The Question / Hypothesis</h3>
-  <p>
-    A question that arises from these explorations could be: 
-    <em>“How does temperature vary across these 13 mice over a 14‐day cycle, 
-    and are there distinct day/night or cyclical patterns that might align with estrus cycles?”</em>
-  </p>
-
-  <h3>Current Progress on Final Dynamic Graph</h3>
-  <p>
-    Below is a partial brush/zoom chart (Chart #5) that shows we can focus on sub‐ranges of time. 
-    Further improvements (e.g., advanced tooltips, overlays highlighting estrus days) are still in progress.
-  </p>
+  <!-- If you want extra text or writeup, add it here or link to a separate page -->
 
   <!-- Load D3 -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
-  <!-- Your custom JS -->
+  <!-- Our main JS file -->
   <script src="main.js"></script>
 </body>
 </html>

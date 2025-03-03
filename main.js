@@ -1,509 +1,324 @@
 // main.js
 
-/////////////////////////////////////
-// 1) Load the CSV & Convert Data //
-/////////////////////////////////////
-d3.csv("data/Mouse_Data_Student_Copy.csv")
-  .then(rawData => {
-    // Check if we actually got rows:
-    console.log("CSV loaded. Row count:", rawData.length);
-    if (rawData.length === 0) {
-      console.warn("No data rows found. Check if the CSV is empty or path is incorrect.");
-      return; // Stop if no data
-    }
+///////////////////////
+// 1) LOAD & TRANSFORM
+///////////////////////
+let longData = [];
+let allMouseIDs = [];
 
-    // Print a sample row for debugging:
-    console.log("First row sample:", rawData[0]);
+d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
+  console.log("Loaded CSV rows:", rawData.length);
+  if (!rawData.length) {
+    console.warn("No data found in CSV. Check file path/names.");
+    return;
+  }
 
-    // If your CSV has columns named F1,F2..., you may need to adapt these lines:
-    // We'll assume the CSV has columns: f1,f2,...,f13 in the header, plus 'minute' we create.
-
-    // STEP A: Add a numeric "minute" based on row index
-    rawData.forEach((row, i) => {
-      row.minute = i; // 0-based index
-    });
-
-    // STEP B: Convert from WIDE to LONG format
-    const longData = [];
-    rawData.forEach(row => {
-      const minVal = +row.minute; // parse to number
-      Object.keys(row).forEach(col => {
-        // Skip the artificially added "minute" key
-        if (col === "minute") return;
-
-        const val = row[col];
-        // Check that we have a valid string
-        if (val !== undefined && val.trim() !== "") {
-          // Convert to number
-          const tempNum = +val;
-          if (!Number.isNaN(tempNum)) {
-            longData.push({
-              mouseID: col,       // e.g. "f1"
-              minute: minVal,     // numeric minute
-              temperature: tempNum
-            });
-          } else {
-            // This row had a non-numeric value; you can decide whether to skip or log a warning
-            // console.warn(`Non-numeric temperature for mouse ${col}, minute ${minVal}: "${val}"`);
-          }
-        }
-      });
-    });
-
-    console.log("longData length:", longData.length);
-    if (longData.length === 0) {
-      console.warn("longData is empty—maybe column names don’t match, or all values are non-numeric.");
-      return; // No valid data to visualize
-    }
-
-    // Distinct mouse IDs
-    const allMice = [...new Set(longData.map(d => d.mouseID))];
-    console.log("Mouse IDs found:", allMice);
-
-    /////////////////////////////////
-    // 2) Generate Charts         //
-    /////////////////////////////////
-    createMultiLineChart(longData, allMice, "#chart1");
-    createSingleMouseLine(longData, "f1", "#chart2");   // Example: "f1"
-    createBarChartAvgTemp(longData, allMice, "#chart3");
-    createDayNightComparison(longData, "f1", "#chart4");
-    createBrushZoomChart(longData, "f2", "#chart5");    // Example: "f2"
-
-    // If you have more charts, define more functions and call them here.
-
-  })
-  .catch(err => {
-    console.error("Error loading CSV:", err);
+  // Add 'minute' index
+  rawData.forEach((row, i) => {
+    row.minute = i;
   });
 
+  // Reshape from wide to long
+  rawData.forEach(row => {
+    const minVal = +row.minute;
+    Object.keys(row).forEach(col => {
+      if (col === "minute") return; // skip artificially added key
+      const tempStr = row[col];
+      if (tempStr) {
+        const tempNum = +tempStr;
+        if (!isNaN(tempNum)) {
+          // Build record
+          longData.push({
+            mouseID: col,        // e.g. "f1"
+            minute: minVal,
+            temperature: tempNum
+          });
+        }
+      }
+    });
+  });
 
-//////////////////////////////////////////////////////
-// 2.1) Multi‐Line Chart: All Mice in One SVG       //
-//////////////////////////////////////////////////////
-function createMultiLineChart(data, allMice, container) {
-  console.log("createMultiLineChart() called for container:", container);
+  // Enrich with sex, day, estrus
+  longData.forEach(d => {
+    d.sex = d.mouseID.toLowerCase().startsWith("f") ? "F" : "M";
+    d.day = Math.floor(d.minute / 1440); 
+    // e.g. estrus every 4 days from day=2 (adjust logic if needed)
+    d.isEstrus = (d.sex === "F") && (d.day % 4 === 2);
+  });
 
-  const width = 800,
-        height = 300,
-        margin = { top: 30, right: 120, bottom: 50, left: 60 };
+  // Distinct mouse IDs
+  allMouseIDs = Array.from(new Set(longData.map(d => d.mouseID)));
+  console.log("Mouse IDs found:", allMouseIDs);
+
+  // Generate checkboxes
+  createCheckboxes(allMouseIDs);
+
+  // Draw chart initially with all mice selected
+  updateChart();
+})
+.catch(err => {
+  console.error("Error loading CSV:", err);
+});
+
+
+////////////////////////////
+// 2) CREATE CHECKBOXES   //
+////////////////////////////
+function createCheckboxes(mouseIDs) {
+  const container = d3.select("#mouseToggles");
+  container.html(""); // clear if needed
+
+  mouseIDs.forEach(mID => {
+    const label = container.append("label")
+      .style("margin-right", "10px");
+
+    label.append("input")
+      .attr("type", "checkbox")
+      .attr("value", mID)
+      .attr("checked", true) // default: all selected
+      .on("change", updateChart);
+
+    label.append("span").text(mID);
+  });
+}
+
+
+////////////////////////////////////////////
+// 3) UPDATE CHART (re-draw with filters) //
+////////////////////////////////////////////
+function updateChart() {
+  // Determine which mice are checked
+  const checkedMice = [];
+  d3.selectAll("#mouseToggles input[type=checkbox]").each(function() {
+    if (this.checked) {
+      checkedMice.push(this.value);
+    }
+  });
+
+  // Clear the old chart
+  d3.select("#finalChart").selectAll("*").remove();
+
+  // If no mice are selected, do nothing or show a message
+  if (!checkedMice.length) {
+    d3.select("#finalChart").append("p").text("No mice selected!");
+    return;
+  }
+
+  // Build final interactive chart with chosen mice
+  createFinalInteractiveChart(longData, checkedMice, "#finalChart", allMouseIDs);
+}
+
+
+////////////////////////////////////////////////////////////
+// 4) CREATE FINAL INTERACTIVE CHART WITH ADV. FEATURES   //
+////////////////////////////////////////////////////////////
+function createFinalInteractiveChart(data, selectedMice, container, allMice) {
+  // Filter data to only selected mice
+  const filtered = data.filter(d => selectedMice.includes(d.mouseID));
+
+  // Dimensions
+  const width = 900,
+        height = 500,
+        margin = { top: 60, right: 150, bottom: 50, left: 60 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  // Group data by mouseID
-  const nested = d3.groups(data, d => d.mouseID);
-
-  // x/y domains
-  const xExtent = d3.extent(data, d => d.minute);
-  const yExtent = d3.extent(data, d => d.temperature);
-
-  // Check for NaN in your extents
-  console.log("xExtent (minutes):", xExtent);
-  console.log("yExtent (temp):", yExtent);
-
-  const xScale = d3.scaleLinear().domain(xExtent).range([0, innerWidth]);
-  const yScale = d3.scaleLinear().domain(yExtent).range([innerHeight, 0]).nice();
-
-  // color scale
-  const colorScale = d3.scaleOrdinal()
-    .domain(allMice)
-    .range(d3.schemeCategory10);
-
-  // line generator
-  const line = d3.line()
-    .x(d => xScale(d.minute))
-    .y(d => yScale(d.temperature));
-
-  // Append SVG
-  const svg = d3.select(container).append("svg")
+  // SVG
+  const svg = d3.select(container)
+    .append("svg")
     .attr("width", width)
     .attr("height", height);
 
-  const g = svg.append("g")
+  const gMain = svg.append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // Draw one path per mouse
-  nested.forEach(([mID, recs]) => {
-    recs.sort((a,b) => d3.ascending(a.minute, b.minute));
-    g.append("path")
-      .datum(recs)
-      .attr("fill", "none")
-      .attr("stroke", colorScale(mID))
-      .attr("stroke-width", 1.2)
-      .attr("opacity", 0.8)
-      .attr("d", line);
-  });
+  // x scale
+  const xExtent = d3.extent(filtered, d => d.minute);
+  const xScale = d3.scaleLinear()
+    .domain(xExtent)
+    .range([0, innerWidth]);
+
+  // y scale
+  const yExtent = d3.extent(filtered, d => d.temperature);
+  const yScale = d3.scaleLinear()
+    .domain(yExtent)
+    .range([innerHeight, 0])
+    .nice();
+
+  // color scale
+  const colorScale = d3.scaleOrdinal(d3.schemeTableau10)
+    .domain(allMice);
 
   // Axes
   const xAxis = d3.axisBottom(xScale).ticks(10);
   const yAxis = d3.axisLeft(yScale).ticks(6);
 
-  g.append("g")
-    .attr("class", "axis")
+  const gX = gMain.append("g")
     .attr("transform", `translate(0,${innerHeight})`)
     .call(xAxis);
 
-  g.append("g")
-    .attr("class", "axis")
-    .call(yAxis);
+  gMain.append("g").call(yAxis);
 
   // Title
-  g.append("text")
+  gMain.append("text")
     .attr("x", innerWidth / 2)
-    .attr("y", -10)
+    .attr("y", -20)
     .attr("text-anchor", "middle")
-    .style("font-size", "14px")
-    .text("Multi‐Line: All Mice Temperature Over Time");
+    .style("font-size", "16px")
+    .text("Interactive Mouse Temperatures Over 14 Days");
 
-  // Legend
-  const legend = svg.append("g")
-    .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
-
-  allMice.forEach((m, i) => {
-    const yPos = i * 20;
-    legend.append("rect")
-      .attr("class", "legend-rect")
-      .attr("x", 0)
-      .attr("y", yPos)
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", colorScale(m));
-
-    legend.append("text")
-      .attr("class", "legend-item")
-      .attr("x", 20)
-      .attr("y", yPos + 10)
-      .style("font-size", "12px")
-      .text(m);
-  });
-}
-
-
-//////////////////////////////////////////////////////
-// 2.2) Single Mouse Line Chart                     //
-//////////////////////////////////////////////////////
-function createSingleMouseLine(data, mouseID, container) {
-  console.log("createSingleMouseLine() for:", mouseID, "in", container);
-
-  const filtered = data.filter(d => d.mouseID === mouseID);
-  if (filtered.length === 0) {
-    console.warn(`No data for mouseID: ${mouseID}`);
-    return;
-  }
-
-  const width = 400,
-        height = 300,
-        margin = { top: 30, right: 20, bottom: 40, left: 50 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  // x/y domains
-  filtered.sort((a,b) => d3.ascending(a.minute, b.minute));
-  const xExtent = d3.extent(filtered, d => d.minute);
-  const yExtent = d3.extent(filtered, d => d.temperature);
-
-  console.log(`[SingleMouse] xExtent:`, xExtent, `yExtent:`, yExtent);
-
-  const xScale = d3.scaleLinear().domain(xExtent).range([0, innerWidth]);
-  const yScale = d3.scaleLinear().domain(yExtent).range([innerHeight, 0]).nice();
-
-  // line generator
-  const line = d3.line()
-    .x(d => xScale(d.minute))
-    .y(d => yScale(d.temperature));
-
-  // Append SVG
-  const svg = d3.select(container).append("svg")
-    .attr("width", width)
-    .attr("height", height);
-
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // path
-  g.append("path")
-    .datum(filtered)
-    .attr("fill", "none")
-    .attr("stroke", "steelblue")
-    .attr("stroke-width", 1.5)
-    .attr("d", line);
-
-  // axes
-  const xAxis = d3.axisBottom(xScale).ticks(5);
-  const yAxis = d3.axisLeft(yScale).ticks(5);
-
-  g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(xAxis);
-
-  g.append("g").call(yAxis);
-
-  // title
-  g.append("text")
-    .attr("x", innerWidth / 2)
-    .attr("y", -10)
-    .attr("text-anchor", "middle")
-    .style("font-size", "13px")
-    .text(`Single Mouse (${mouseID}) Temp Over Time`);
-}
-
-
-//////////////////////////////////////////////////////
-// 2.3) Bar Chart: Avg Temperature by Mouse         //
-//////////////////////////////////////////////////////
-function createBarChartAvgTemp(data, allMice, container) {
-  console.log("createBarChartAvgTemp() in", container);
-
-  // Group by mouse => average temperature
-  const avgByMouse = d3.rollups(
-    data,
-    v => d3.mean(v, d => d.temperature),
-    d => d.mouseID
-  );
-  // Sort by mouse ID, or by value
-  avgByMouse.sort((a,b) => d3.ascending(a[0], b[0]));
-
-  console.log("Averages by mouse:", avgByMouse);
-
-  const width = 500, height = 300;
-  const margin = { top: 30, right: 20, bottom: 70, left: 60 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  // Scales
-  const x = d3.scaleBand()
-    .domain(avgByMouse.map(d => d[0]))  // mouseID
-    .range([0, innerWidth])
-    .padding(0.2);
-
-  const y = d3.scaleLinear()
-    .domain([0, d3.max(avgByMouse, d => d[1])])
-    .range([innerHeight, 0])
-    .nice();
-
-  // SVG
-  const svg = d3.select(container).append("svg")
-    .attr("width", width)
-    .attr("height", height);
-
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Bars
-  g.selectAll("rect")
-    .data(avgByMouse)
-    .enter()
-    .append("rect")
-    .attr("x", d => x(d[0]))
-    .attr("width", x.bandwidth())
-    .attr("y", d => y(d[1]))
-    .attr("height", d => innerHeight - y(d[1]))
-    .attr("fill", "tomato");
-
-  // Axes
-  const xAxis = d3.axisBottom(x);
-  const yAxis = d3.axisLeft(y).ticks(5);
-
-  g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(xAxis)
-    .selectAll("text")
-    .style("text-anchor", "middle");
-
-  g.append("g").call(yAxis);
-
-  // Title
-  g.append("text")
-    .attr("x", innerWidth / 2)
-    .attr("y", -5)
-    .attr("text-anchor", "middle")
-    .style("font-size", "14px")
-    .text("Average Temperature by Mouse");
-}
-
-
-//////////////////////////////////////////////////////
-// 2.4) Day vs. Night Comparison (Single Mouse)     //
-//////////////////////////////////////////////////////
-function createDayNightComparison(data, mouseID, container) {
-  console.log("createDayNightComparison() for:", mouseID);
-
-  // Filter for this mouse
-  const filtered = data.filter(d => d.mouseID === mouseID);
-  if (!filtered.length) {
-    console.warn(`No data found for mouseID ${mouseID} in day/night chart.`);
-    return;
-  }
-
-  // Tag each record as Day or Night
-  // For example, minutes 0-719 => "Night", 720-1439 => "Day"
-  const withDayNight = filtered.map(d => {
-    const minOfDay = d.minute % 1440;
-    return {
-      ...d,
-      dayOrNight: (minOfDay < 720) ? "Night" : "Day"
-    };
+  // Shading estrus days
+  const estrusDays = Array.from(new Set(filtered.filter(d => d.isEstrus).map(d => d.day)));
+  const gShade = gMain.append("g").attr("class", "estrus-shading");
+  estrusDays.forEach(dayNum => {
+    const dayStart = dayNum * 1440;
+    const dayEnd = (dayNum + 1) * 1440;
+    // If out of x range, skip
+    if (dayStart > xExtent[1] || dayEnd < xExtent[0]) return;
+    gShade.append("rect")
+      .attr("x", xScale(dayStart))
+      .attr("y", 0)
+      .attr("width", xScale(dayEnd) - xScale(dayStart))
+      .attr("height", innerHeight)
+      .attr("fill", "pink")
+      .attr("opacity", 0.15)
+      .append("title")
+        .text(`Estrus Day: ${dayNum}`);
   });
 
-  // Group by dayOrNight => average
-  const grouped = d3.rollups(
-    withDayNight,
-    v => d3.mean(v, d => d.temperature),
-    d => d.dayOrNight
-  );
-  // => [ [ 'Night', 37.12 ], [ 'Day', 37.53 ] ]
-  console.log("Day/Night averages:", grouped);
+  // Nest data by mouse
+  const nested = d3.groups(filtered, d => d.mouseID)
+    .map(([mID, recs]) => {
+      recs.sort((a,b) => d3.ascending(a.minute, b.minute));
+      return { mouseID: mID, records: recs };
+    });
 
-  const width = 300, height = 300;
-  const margin = { top: 30, right: 20, bottom: 40, left: 50 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  // Scales
-  const x = d3.scaleBand()
-    .domain(["Night","Day"])
-    .range([0, innerWidth])
-    .padding(0.2);
-
-  const maxTemp = d3.max(grouped, d => d[1]);
-  const y = d3.scaleLinear()
-    .domain([0, maxTemp])
-    .range([innerHeight, 0])
-    .nice();
-
-  // SVG
-  const svg = d3.select(container).append("svg")
-    .attr("width", width)
-    .attr("height", height);
-
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Bars
-  g.selectAll("rect")
-    .data(grouped)
-    .enter()
-    .append("rect")
-    .attr("x", d => x(d[0]))
-    .attr("width", x.bandwidth())
-    .attr("y", d => y(d[1]))
-    .attr("height", d => innerHeight - y(d[1]))
-    .attr("fill", d => d[0] === "Night" ? "darkblue" : "gold");
-
-  // Axes
-  const xAxis = d3.axisBottom(x);
-  const yAxis = d3.axisLeft(y).ticks(5);
-
-  g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(xAxis);
-
-  g.append("g").call(yAxis);
-
-  // Title
-  g.append("text")
-    .attr("x", innerWidth / 2)
-    .attr("y", -5)
-    .attr("text-anchor", "middle")
-    .style("font-size", "13px")
-    .text(`Day/Night Avg Temp (${mouseID})`);
-}
-
-
-//////////////////////////////////////////////////////
-// 2.5) Brush/Zoom Chart (Prototype Interaction)    //
-//////////////////////////////////////////////////////
-function createBrushZoomChart(data, mouseID, container) {
-  console.log("createBrushZoomChart() for:", mouseID);
-
-  // Filter for one mouse
-  const filtered = data.filter(d => d.mouseID === mouseID);
-  if (!filtered.length) {
-    console.warn(`No data found for mouseID ${mouseID} in brush/zoom chart.`);
-    return;
-  }
-
-  filtered.sort((a,b) => d3.ascending(a.minute, b.minute));
-
-  const width = 600, height = 300;
-  const margin = { top: 30, right: 20, bottom: 50, left: 60 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  const svg = d3.select(container).append("svg")
-    .attr("width", width)
-    .attr("height", height);
-
-  const g = svg.append("g")
-    .attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Scales
-  const xScale = d3.scaleLinear()
-    .domain(d3.extent(filtered, d => d.minute))
-    .range([0, innerWidth]);
-
-  const yScale = d3.scaleLinear()
-    .domain(d3.extent(filtered, d => d.temperature))
-    .range([innerHeight, 0])
-    .nice();
-
-  // Axes
-  const xAxis = d3.axisBottom(xScale).ticks(10);
-  const yAxis = d3.axisLeft(yScale).ticks(5);
-
-  // Draw line
+  // Line generator
   const lineGen = d3.line()
     .x(d => xScale(d.minute))
     .y(d => yScale(d.temperature));
 
-  const linePath = g.append("path")
-    .datum(filtered)
-    .attr("fill", "none")
-    .attr("stroke", "purple")
-    .attr("stroke-width", 1.5)
-    .attr("d", lineGen);
+  // Tooltip
+  const tooltip = d3.select("body").append("div")
+    .attr("role", "tooltip")
+    .style("position", "absolute")
+    .style("opacity", 0);
 
-  const xAxisG = g.append("g")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(xAxis);
+  // Draw lines & circles
+  nested.forEach(group => {
+    const mID = group.mouseID;
+    const recs = group.records;
 
-  g.append("g").call(yAxis);
+    const gLine = gMain.append("g").attr("class", "mouse-group");
 
-  // Title
-  g.append("text")
-    .attr("x", innerWidth / 2)
-    .attr("y", -10)
-    .attr("text-anchor", "middle")
-    .style("font-size", "13px")
-    .text(`Brush/Zoom Prototype (${mouseID})`);
+    // Path
+    gLine.append("path")
+      .datum(recs)
+      .attr("fill", "none")
+      .attr("stroke", colorScale(mID))
+      .attr("stroke-width", 2)
+      .attr("opacity", 0.9)
+      .attr("d", lineGen);
+
+    // Circles (for tooltips)
+    gLine.selectAll("circle")
+      .data(recs)
+      .join("circle")
+      .attr("r", 3)
+      .attr("fill", colorScale(mID))
+      .attr("cx", d => xScale(d.minute))
+      .attr("cy", d => yScale(d.temperature))
+      .attr("opacity", 0) // Hide by default, show on hover if you prefer
+      .on("mouseover", (evt, d) => {
+        tooltip.style("opacity", 1)
+          .html(`Mouse: <b>${mID}</b><br>
+                 Minute: ${d.minute}<br>
+                 Temp: ${d.temperature.toFixed(2)}`);
+      })
+      .on("mousemove", (evt) => {
+        tooltip
+          .style("left", evt.pageX + 10 + "px")
+          .style("top", evt.pageY - 20 + "px");
+      })
+      .on("mouseout", () => {
+        tooltip.style("opacity", 0);
+      });
+  });
 
   // Brush
   const brush = d3.brushX()
-    .extent([[0, 0], [innerWidth, innerHeight]])
+    .extent([[0,0],[innerWidth,innerHeight]])
     .on("end", brushed);
 
-  g.append("g")
+  gMain.append("g")
     .attr("class", "brush")
     .call(brush);
 
-  function brushed(event) {
-    const selection = event.selection;
-    if (!selection) {
-      // User cleared or clicked outside brush
-      return;
-    }
+  function brushed(evt) {
+    const selection = evt.selection;
+    if (!selection) return; // user clicked outside or cleared brush
     const [x0, x1] = selection;
-    // Convert pixel range -> data range
-    const newMinX = xScale.invert(x0);
-    const newMaxX = xScale.invert(x1);
+    const domain0 = xScale.invert(x0);
+    const domain1 = xScale.invert(x1);
 
-    // Update domain
-    xScale.domain([newMinX, newMaxX]);
-
-    // Redraw line & x-axis
-    linePath.attr("d", lineGen);
-    xAxisG.call(xAxis);
-
-    // Clear brush selection
-    g.select(".brush").call(brush.move, null);
+    // Update xScale
+    xScale.domain([domain0, domain1]);
+    // Redraw axis
+    gX.call(xAxis);
+    // Redraw lines, circles
+    redraw();
+    // Clear brush
+    gMain.select(".brush").call(brush.move, null);
   }
+
+  function redraw() {
+    // Update estrus shading
+    gShade.selectAll("rect")
+      .attr("x", function() {
+        const xVal = +d3.select(this).attr("data-day-start") || 0;
+        return xScale(xVal);
+      })
+      .attr("width", function() {
+        const dayStart = +d3.select(this).attr("data-day-start") || 0;
+        const dayEnd = +d3.select(this).attr("data-day-end") || 0;
+        return xScale(dayEnd) - xScale(dayStart);
+      });
+
+    // Update paths
+    nested.forEach(group => {
+      const mID = group.mouseID;
+      const recs = group.records;
+      gMain.selectAll(".mouse-group path")
+        .filter(function() {
+          // We can match by color or another attribute
+          return d3.select(this).attr("stroke") === colorScale(mID);
+        })
+        .attr("d", lineGen(recs));
+      // Update circles
+      gMain.selectAll(".mouse-group circle")
+        .filter(d => d.mouseID === mID)
+        .attr("cx", d => xScale(d.minute))
+        .attr("cy", d => yScale(d.temperature));
+    });
+  }
+
+  // Legend (static, no toggling here - toggling is done by checkboxes)
+  const legend = svg.append("g")
+    .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
+
+  nested.forEach((group, i) => {
+    const mID = group.mouseID;
+    const yPos = i * 20;
+    legend.append("rect")
+      .attr("x", 0)
+      .attr("y", yPos)
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", colorScale(mID));
+    legend.append("text")
+      .attr("x", 20)
+      .attr("y", yPos + 10)
+      .style("font-size", "12px")
+      .text(mID);
+  });
 }
