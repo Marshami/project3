@@ -9,12 +9,12 @@ let allMice = [];
 d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
   console.log("Rows in CSV:", rawData.length);
 
-  // 1.1) Tag each row with a 'minute' index
+  // Tag each row with a 'minute' index
   rawData.forEach((row, i) => {
     row.minute = i;
   });
 
-  // 1.2) Convert from wide -> long
+  // Convert from wide to long
   rawData.forEach(row => {
     const minuteVal = +row.minute;
     Object.keys(row).forEach(col => {
@@ -83,7 +83,7 @@ function updateHeatmap() {
   // Clear old chart
   d3.select("#heatmap").selectAll("*").remove();
 
-  // If none selected, show a message
+  // If none are selected, show a message
   if (!selected.length) {
     d3.select("#heatmap").append("p").text("No mice selected!");
     return;
@@ -99,11 +99,11 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS, RESET BUTTON, AND RED-ONLY COLOR LEGEND
+//    PLUS AXIS LABELS, RESET BUTTON, AND ORANGE COLOR LEGEND
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
-  // 4.1) DOWNSAMPLE: e.g. 20-minute bins for each (mouseID, binIndex)
+  // 4.1) DOWNSAMPLE: e.g., 20-minute bins for each (mouseID, binIndex)
   /////////////////////////////////////////////////////////////////////////
   const binSize = 20; // Adjust as needed
   const nested = d3.rollups(
@@ -112,7 +112,7 @@ function createHeatmap(data, selectedMice) {
     d => d.mouseID,
     d => Math.floor(d.minute / binSize)
   );
-  // => [ [ 'f1', [ [0, avg], [1, avg], ...] ], ['f2', ...], ...]
+  // => [ [ 'f1', [ [0, avg], [1, avg], ...] ], [ 'f2', ...], ...]
 
   // Flatten
   let binData = [];
@@ -126,7 +126,7 @@ function createHeatmap(data, selectedMice) {
     });
   });
   // Sort so we draw from left (lowest binIndex) to right (highest binIndex)
-  binData.sort((a,b) => d3.ascending(a.binIndex, b.binIndex));
+  binData.sort((a, b) => d3.ascending(a.binIndex, b.binIndex));
 
   /////////////////////////////////////////////////////////////////////////
   // 4.2) SCALES
@@ -148,14 +148,14 @@ function createHeatmap(data, selectedMice) {
   const xExtent = d3.extent(binData, d => d.binIndex);
   const xScale = d3.scaleLinear()
     .domain(xExtent)
-    .range([0, 1000]);  // ~1000 px wide
+    .range([0, 1000]);
 
   // Temperature range
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
 
-  // Use d3.interpolateReds for a single red color scale
-  // minTemp => a lighter red/pink, maxTemp => a deep dark red
-  const colorScale = d3.scaleSequential(d3.interpolateReds)
+  // Use d3.interpolateOranges for a single orange color scale
+  // minTemp => lightest orange (near white), maxTemp => darkest orange
+  const colorScale = d3.scaleSequential(d3.interpolateOranges)
     .domain([minTemp, maxTemp]);
 
   /////////////////////////////////////////////////////////////////////////
@@ -270,14 +270,14 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND (LIGHT RED => DARK RED)
+  // 4.7) COLOR LEGEND (LIGHT ORANGE => DARK ORANGE)
   /////////////////////////////////////////////////////////////////////////
   const legendHeight = 200;
 
-  // We want top=high temp => darkest red, bottom=low temp => light red
-  // domain => [maxTemp, minTemp] => range => [0, legendHeight]
+  // We want top=high temp => darkest orange, bottom=low temp => light orange
+  // So domain => [maxTemp, minTemp] => range => [0, legendHeight]
   const legendScale = d3.scaleLinear()
-    .domain([maxTemp, minTemp])  // top -> bottom
+    .domain([maxTemp, minTemp])  // top->bottom
     .range([0, legendHeight]);
 
   const legendAxis = d3.axisRight(legendScale)
@@ -290,7 +290,7 @@ function createHeatmap(data, selectedMice) {
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // offset=0 => colorScale(maxTemp)=darkest red, offset=100 => colorScale(minTemp)=light red
+  // offset=0 => colorScale(maxTemp)=darkest orange, offset=100 => colorScale(minTemp)=light orange
   [ [0, maxTemp], [100, minTemp] ].forEach(([offset, val]) => {
     gradient.append("stop")
       .attr("offset", offset + "%")
