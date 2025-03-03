@@ -8,15 +8,106 @@
 <body>
 
   <h1>Nambu-kai — Interactive Mouse Heatmap</h1>
-  <p>This heatmap shows downsampled temperature data for multiple mice over 14 days. 
-  Each row represents one mouse, each column is a time bin (e.g., every 20 minutes), 
-  and the color indicates the average temperature.</p>
+
+  <!--============ Introduction / Rationale ============-->
+  <section>
+    <h2>Introduction & Rationale</h2>
+    <p>
+      This heatmap shows downsampled temperature data for multiple mice over a 
+      14-day period. Each row represents one mouse, and each column is a time bin 
+      (e.g., every 20 minutes). The color indicates the average temperature in 
+      that time bin.
+    </p>
+    <p>
+      I chose a heatmap because plotting 13 (or more) overlapping lines quickly 
+      becomes visually cluttered. A “time vs. mouse” grid makes it easy to spot 
+      patterns, compare mice, and identify hot or cool periods without line 
+      overlap.
+    </p>
+  </section>
+
+  <!--============ Data Transformations ============-->
+  <section>
+    <h2>Data Transformations & Color Palette</h2>
+    <p>
+      I start with a wide CSV file containing columns for each mouse (e.g., 
+      <code>f1, f2, ... f13</code>) plus a row index for each minute. I convert 
+      this to a “long” format: <code>{ mouseID, minute, temperature }</code>. Then 
+      I “bin” the data into 20-minute intervals by taking the mean temperature 
+      within each bin (e.g., minutes <code>0..19</code> become bin <code>0</code>, 
+      minutes <code>20..39</code> become bin <code>1</code>, etc.). This 
+      aggregation reduces clutter and speeds up rendering.
+    </p>
+    <p>
+      My color palette uses a single-hue orange scale (via 
+      <code>d3.interpolateOranges</code>) from pale/light orange for the coolest 
+      values to deep/dark orange for the hottest. This approach emphasizes the 
+      “heat” aspect of the temperature data in an intuitive, single-hue manner.
+    </p>
+  </section>
+
+  <!--============ Interactions ============-->
+  <section>
+    <h2>Interactive Features</h2>
+    <ul>
+      <li><strong>Brushing / Zooming:</strong> A user can drag a brush over part 
+      of the time axis to zoom in. I update the x-scale domain and re-render 
+      the grid, letting the user inspect a narrower time range in detail.</li>
+      <li><strong>Reset Zoom Button:</strong> Clicking this button restores the full 
+      14-day domain.</li>
+      <li><strong>Mouse Toggles:</strong> Each mouse has a checkbox; users can 
+      show or hide any mouse. The heatmap immediately re-renders for only 
+      selected mice.</li>
+      <li><strong>Tooltips:</strong> Hovering over any cell displays a small box 
+      showing the exact mouse, time bin, and temperature.</li>
+    </ul>
+  </section>
+
+  <!--============ Development Process ============-->
+  <section>
+    <h2>Development Process & Team Overview</h2>
+    <p>
+      <strong>Team Name:</strong> Nambu-kai  
+      <strong>Team Members:</strong> Takumi Inoue
+    </p>
+    <p>
+      <strong>Time Spent:</strong> Approximately 10–12 hours in total. The 
+      breakdown:
+    </p>
+    <ul>
+      <li><em>Data Loading & Binning Logic (2–3 hours):</em> I first wrote a 
+      script to reshape the wide CSV into a more convenient format and then 
+      aggregated by 20-minute bins.</li>
+      <li><em>Initial Heatmap Implementation (3–4 hours):</em> I created the 
+      rectangle grid with D3, assigned the color scale, and tested small 
+      subsets of data for correctness.</li>
+      <li><em>Interactions (2 hours):</em> I added brushing/zoom, checkboxes, 
+      and tooltips to enhance exploration.</li>
+      <li><em>Styling & Final Tweaks (1–2 hours):</em> I polished the color scale, 
+      legend design, axis labels, and the “Reset Zoom” button.</li>
+    </ul>
+    <p>
+      <strong>Rationale for Final Design:</strong> I initially tried multi-line 
+      plots, but they were too crowded with many mice. I considered using multiple 
+      subplots but liked having a single, global view via a heatmap. The orange scale 
+      effectively conveys “milder/lower temps” in lighter shades and “hotter temps” 
+      in darker shades.
+    </p>
+  </section>
+
+  <!--============ Visualization Containers ============-->
+  <p>
+    Below, I provide checkboxes to toggle each mouse, followed by the interactive 
+    heatmap. Use the brush to zoom in on a time range, and click “Reset Zoom” to 
+    restore the full domain.
+  </p>
 
   <div id="mouseToggles"></div>  
   <div id="heatmap"></div>
 
-  <!-- Load D3 -->
+  <!-- Load D3 and my main.js code -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="main.js"></script>
+
 </body>
 </html>
