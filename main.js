@@ -1,32 +1,32 @@
 // main.js
 
-////////////////////////////////////
-// 1) LOAD CSV & WIDE->LONG 
-////////////////////////////////////
+////////////////////////////////////////////////////////////
+// 1) LOAD CSV (wide -> long) AND STORE IN GLOBAL ARRAY
+////////////////////////////////////////////////////////////
 let fullData = [];
 let allMice = [];
 
 d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
   console.log("CSV rows loaded:", rawData.length);
 
-  // Tag each row with a minute index
+  // Each row gets a 'minute' index
   rawData.forEach((row, i) => {
-    row.minute = i; 
+    row.minute = i;
   });
 
-  // Reshape wide->long
+  // Convert from wide to long
   rawData.forEach(row => {
-    const minVal = +row.minute;
+    const minuteVal = +row.minute;
     Object.keys(row).forEach(col => {
       if (col === "minute") return;
       const val = row[col];
       if (val) {
-        const temp = +val;
-        if (!isNaN(temp)) {
+        const tempNum = +val;
+        if (!isNaN(tempNum)) {
           fullData.push({
-            mouseID: col,
-            minute: minVal,
-            temperature: temp
+            mouseID: col,        // e.g. "f1"
+            minute: minuteVal,
+            temperature: tempNum
           });
         }
       }
@@ -35,12 +35,12 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
 
   // Distinct mouse IDs
   allMice = [...new Set(fullData.map(d => d.mouseID))];
-  console.log("All mice:", allMice);
+  console.log("All mice found:", allMice);
 
   // Build checkboxes
   createMouseToggles(allMice);
 
-  // Render heatmap with all mice selected by default
+  // Initial heatmap with all mice selected
   updateHeatmap();
 
 }).catch(err => {
@@ -48,9 +48,9 @@ d3.csv("data/Mouse_Data_Student_Copy.csv").then(rawData => {
 });
 
 
-////////////////////////////////////
-// 2) CREATE CHECKBOXES
-////////////////////////////////////
+//////////////////////////////////////////
+// 2) CREATE CHECKBOXES FOR EACH MOUSE
+//////////////////////////////////////////
 function createMouseToggles(mouseIDs) {
   const container = d3.select("#mouseToggles");
   container.selectAll("*").remove();
@@ -58,22 +58,22 @@ function createMouseToggles(mouseIDs) {
   container.append("p").text("Select which mice to display below:");
 
   mouseIDs.forEach(mID => {
-    const label = container.append("label");
+    const label = container.append("label").style("margin-right", "10px");
     label.append("input")
       .attr("type", "checkbox")
       .attr("value", mID)
-      .property("checked", true)
+      .property("checked", true) // default all checked
       .on("change", updateHeatmap);
     label.append("span").text(mID);
   });
 }
 
 
-////////////////////////////////////
-// 3) UPDATE HEATMAP ON TOGGLE
-////////////////////////////////////
+//////////////////////////////////////
+// 3) UPDATE HEATMAP ON TOGGLE EVENT
+//////////////////////////////////////
 function updateHeatmap() {
-  // Which mice are checked?
+  // Collect which mice are checked
   const selected = [];
   d3.selectAll("#mouseToggles input[type=checkbox]").each(function() {
     if (this.checked) selected.push(this.value);
@@ -82,34 +82,34 @@ function updateHeatmap() {
   // Clear old chart
   d3.select("#heatmap").selectAll("*").remove();
 
-  // If none selected, show message
+  // If none are selected, show message
   if (!selected.length) {
     d3.select("#heatmap").append("p").text("No mice selected!");
     return;
   }
 
-  // Filter fullData to only those mice
+  // Filter our global fullData
   const filtered = fullData.filter(d => selected.includes(d.mouseID));
 
-  // Create & render the heatmap
+  // Build the heatmap
   createHeatmap(filtered, selected);
 }
 
 
-////////////////////////////////////////////////////////
-// 4) CREATE HEATMAP with Brush, Tooltip, Color Scale
-////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
+// 4) CREATE HEATMAP: DOWNSAMPLE + DRAW + BRUSH + TOOLTIP
+//////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
-  // A) Downsample: For example, 20-minute bins
-  const binSize = 20; // adjust to 5, 10, 30, etc.
-  // Group by mouseID + bin => average temperature
+  // 4.1) Downsample (aggregate every 20 minutes)
+  const binSize = 20; // adjust as needed
+  // We rollup by (mouseID, binIndex) => average temperature
   const nested = d3.rollups(
     data,
     v => d3.mean(v, d => d.temperature),
     d => d.mouseID,
     d => Math.floor(d.minute / binSize)
   );
-  // => [ [ 'f1', [ [ binIndex, avgTemp ], [ binIndex, avgTemp ] ] ], [ 'f2', ...], ...]
+  // nested => [ [ 'f1', [ [0, temp], [1, temp], ... ] ], [ 'f2', [...]], ...]
 
   // Flatten
   let binData = [];
@@ -123,31 +123,39 @@ function createHeatmap(data, selectedMice) {
     });
   });
 
-  // For convenience, sort by binIndex
+  // Sort by binIndex so everything draws left -> right
   binData.sort((a,b) => d3.ascending(a.binIndex, b.binIndex));
 
-  // B) Build scales
-  const miceSorted = selectedMice.slice().sort(); // sort the selected mouse IDs
+  // 4.2) SCALES
+  // Sort mice in numeric order: 'f1', 'f2', ..., 'f10' etc.
+  const miceSorted = selectedMice.slice().sort((a,b) => {
+    const numA = parseInt(a.slice(1), 10); // e.g. 'f1' -> 1
+    const numB = parseInt(b.slice(1), 10);
+    return numA - numB;
+  });
+
+  // y-scale: each mouse is a "row"
   const yScale = d3.scaleBand()
-    .domain(miceSorted) 
-    .range([0, miceSorted.length * 30]) // 30 px per row
+    .domain(miceSorted)
+    .range([0, miceSorted.length * 30]) // 30 px each
     .padding(0.1);
 
+  // x-scale: binIndex from min->max
   const xExtent = d3.extent(binData, d => d.binIndex);
   const xScale = d3.scaleLinear()
     .domain(xExtent)
-    .range([0, 1000]); // 1000 px wide chart, adjust as needed
+    .range([0, 1000]); // 1000 px wide or your preference
 
-  // Temperature range
-  const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
+  // color-scale: map temperatures to a color range
+  const [minT, maxT] = d3.extent(binData, d => d.temperature);
   const colorScale = d3.scaleSequential(d3.interpolateSpectral)
-    .domain([maxTemp, minTemp]); 
-    // invert so hot = red, cold = blue (Spectral is reversed typically)
+    .domain([maxT, minT]); 
+    // reversed so hotter = red, cooler = blue in spectral
 
-  // C) Create SVG
+  // 4.3) CREATE SVG & AXES
   const margin = { top: 50, right: 100, bottom: 50, left: 80 };
   const width = 1200,
-        height = yScale.range()[1] + margin.top + margin.bottom + 50; // room for axis
+        height = yScale.range()[1] + margin.top + margin.bottom + 50;
 
   const svg = d3.select("#heatmap")
     .append("svg")
@@ -157,16 +165,16 @@ function createHeatmap(data, selectedMice) {
   const g = svg.append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // D) Axes
+  // X-axis
   const xAxis = d3.axisBottom(xScale)
     .ticks(10)
-    .tickFormat(d => d * binSize); 
-    // Convert binIndex back to "actual minutes"
+    .tickFormat(d => d * binSize);
   g.append("g")
     .attr("class", "x-axis")
     .attr("transform", `translate(0,${yScale.range()[1]})`)
     .call(xAxis);
 
+  // Y-axis
   const yAxis = d3.axisLeft(yScale);
   g.append("g")
     .attr("class", "y-axis")
@@ -180,8 +188,8 @@ function createHeatmap(data, selectedMice) {
     .style("font-size", "16px")
     .text("Interactive Mouse Temperatures Over 14 Days");
 
-  // E) Draw Heatmap Rects
-  // For each row in binData => x = binIndex, y = mouseID
+  // 4.4) DRAW HEATMAP RECTS
+  const rectW = xScale(1) - xScale(0); // width for 1 bin
   const rects = g.selectAll("rect.heat-cell")
     .data(binData)
     .enter()
@@ -189,12 +197,11 @@ function createHeatmap(data, selectedMice) {
     .attr("class", "heat-cell")
     .attr("x", d => xScale(d.binIndex))
     .attr("y", d => yScale(d.mouseID))
-    .attr("width", xScale(1) - xScale(0)) // width of 1 bin
+    .attr("width", rectW)
     .attr("height", yScale.bandwidth())
     .attr("fill", d => colorScale(d.temperature));
 
-  // F) Tooltip 
-  // We'll position absolutely inside #heatmap
+  // 4.5) TOOLTIP
   const tooltip = d3.select("#heatmap")
     .append("div")
     .attr("class", "heatmap-tooltip");
@@ -203,10 +210,10 @@ function createHeatmap(data, selectedMice) {
     .on("mouseover", (evt, d) => {
       tooltip.style("opacity", 1)
         .html(`Mouse: <b>${d.mouseID}</b><br>
-               Bin: ${d.binIndex} (approx ${d.binIndex * binSize} min)<br>
+               Bin: ${d.binIndex} (~${d.binIndex * binSize} min)<br>
                Temp: ${d.temperature.toFixed(2)}°C`);
     })
-    .on("mousemove", (evt) => {
+    .on("mousemove", evt => {
       tooltip
         .style("left", (evt.pageX + 10) + "px")
         .style("top",  (evt.pageY - 20) + "px");
@@ -215,23 +222,22 @@ function createHeatmap(data, selectedMice) {
       tooltip.style("opacity", 0);
     });
 
-  // G) Color Legend (Optional)
+  // 4.6) COLOR LEGEND
   const legendHeight = 200;
   const legendScale = d3.scaleLinear()
-    .domain([maxTemp, minTemp])
+    .domain([maxT, minT])
     .range([0, legendHeight]);
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
     .tickFormat(d => d.toFixed(1));
 
-  // gradient
   const defs = svg.append("defs");
   const gradient = defs.append("linearGradient")
     .attr("id", "tempGradient")
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
-  // colorScale is reversed, so we move from min to max
-  [minTemp, maxTemp].forEach((t, i) => {
+
+  [minT, maxT].forEach((t, i) => {
     gradient.append("stop")
       .attr("offset", i === 0 ? "0%" : "100%")
       .attr("stop-color", colorScale(t));
@@ -239,48 +245,50 @@ function createHeatmap(data, selectedMice) {
 
   const legendG = svg.append("g")
     .attr("transform", `translate(${width - margin.right + 30}, ${margin.top})`);
-  
+
   legendG.append("rect")
     .attr("width", 15)
     .attr("height", legendHeight)
     .style("fill", "url(#tempGradient)");
 
   legendG.append("g")
-    .attr("transform", `translate(15, 0)`)
+    .attr("transform", `translate(15,0)`)
     .call(legendAxis);
 
   legendG.append("text")
-    .attr("x", -20)
+    .attr("x", -15)
     .attr("y", -10)
-    .attr("text-anchor", "start")
     .style("font-size", "12px")
     .text("Temp (°C)");
 
-  // H) Brush for horizontal zoom
-  // We'll allow brushing along the x-axis only
+  // 4.7) BRUSH for horizontal zoom
   const brush = d3.brushX()
     .extent([[0, 0], [xScale.range()[1], yScale.range()[1]]])
-    .on("end", brushEnded);
+    .on("end", brushed);
 
   g.append("g")
     .attr("class", "brush")
     .call(brush);
 
-  function brushEnded(evt) {
+  function brushed(evt) {
     if (!evt.selection) return; // user cleared brush
-    const [x0, x1] = evt.selection;  
+    const [x0, x1] = evt.selection;
     const bin0 = xScale.invert(x0);
     const bin1 = xScale.invert(x1);
-    // update domain
-    xScale.domain([bin0, bin1]);
-    // redraw x-axis
-    g.select(".x-axis").call(d3.axisBottom(xScale).ticks(5).tickFormat(d => Math.round(d*binSize)));
 
-    // reposition rects
+    // Update domain
+    xScale.domain([bin0, bin1]);
+
+    // Redraw x-axis
+    g.select(".x-axis")
+      .call(d3.axisBottom(xScale).ticks(5).tickFormat(d => Math.round(d * binSize)));
+
+    // Reposition rects
     rects
       .attr("x", d => xScale(d.binIndex))
       .attr("width", xScale(1) - xScale(0));
-    // clear brush
+
+    // Clear brush
     g.select(".brush").call(brush.move, null);
   }
 }
