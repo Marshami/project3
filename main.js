@@ -99,7 +99,7 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS, RESET BUTTON, AND ORANGE COLOR LEGEND
+//    PLUS AXIS LABELS, RESET BUTTON, AND LEGEND WITH MIN/MAX TICKS
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
@@ -125,7 +125,6 @@ function createHeatmap(data, selectedMice) {
       });
     });
   });
-  // Sort so we draw from left (lowest binIndex) to right (highest binIndex)
   binData.sort((a, b) => d3.ascending(a.binIndex, b.binIndex));
 
   /////////////////////////////////////////////////////////////////////////
@@ -154,7 +153,6 @@ function createHeatmap(data, selectedMice) {
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
 
   // Use d3.interpolateOranges for a single orange color scale
-  // minTemp => lightest orange (near white), maxTemp => darkest orange
   const colorScale = d3.scaleSequential(d3.interpolateOranges)
     .domain([minTemp, maxTemp]);
 
@@ -270,19 +268,19 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND (LIGHT ORANGE => DARK ORANGE)
+  // 4.7) COLOR LEGEND WITH TICKS AT minTemp AND maxTemp
   /////////////////////////////////////////////////////////////////////////
   const legendHeight = 200;
 
-  // We want top=high temp => darkest orange, bottom=low temp => light orange
-  // So domain => [maxTemp, minTemp] => range => [0, legendHeight]
+  // domain => [maxTemp, minTemp], top => darkest orange, bottom => light orange
   const legendScale = d3.scaleLinear()
-    .domain([maxTemp, minTemp])  // top->bottom
+    .domain([maxTemp, minTemp])
     .range([0, legendHeight]);
 
+  // Only two ticks: absolute max, absolute min
   const legendAxis = d3.axisRight(legendScale)
-    .ticks(5)
-    .tickFormat(d => d.toFixed(1));
+    .tickValues([maxTemp, minTemp])     // <--- Only show 2 ticks
+    .tickFormat(d => d.toFixed(2));     // e.g. 36.01 or 39.12 => 36.01, 39.12
 
   const defsLegend = svg.append("defs");
   const gradient = defsLegend.append("linearGradient")
@@ -290,7 +288,7 @@ function createHeatmap(data, selectedMice) {
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // offset=0 => colorScale(maxTemp)=darkest orange, offset=100 => colorScale(minTemp)=light orange
+  // offset=0 => colorScale(maxTemp)=dark orange, offset=100 => colorScale(minTemp)=light orange
   [ [0, maxTemp], [100, minTemp] ].forEach(([offset, val]) => {
     gradient.append("stop")
       .attr("offset", offset + "%")
@@ -306,7 +304,7 @@ function createHeatmap(data, selectedMice) {
     .attr("height", legendHeight)
     .style("fill", "url(#tempGradient)");
 
-  // The axis next to the gradient
+  // The axis next to the gradient (only top and bottom labels)
   legendG.append("g")
     .attr("transform", `translate(15, 0)`)
     .call(legendAxis);
