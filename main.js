@@ -98,7 +98,7 @@ function updateHeatmap() {
 
 //////////////////////////////////////////////////////////////
 // 4) CREATE HEATMAP: DOWNSAMPLE, DRAW, CLIP, BRUSH, TOOLTIP,
-//    PLUS AXIS LABELS & RESET BUTTON & FIXED LEGEND
+//    PLUS AXIS LABELS & RESET BUTTON & FIXED COLOR (BLUE->RED)
 //////////////////////////////////////////////////////////////
 function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
@@ -150,12 +150,16 @@ function createHeatmap(data, selectedMice) {
     .domain(xExtent)
     .range([0, 1000]); // ~1000 px wide
 
-  // Color scale (temp) -- not reversed domain now
-  // So min => "cooler" color, max => "warmer" color
+  // Determine min and max temps
   const [minTemp, maxTemp] = d3.extent(binData, d => d.temperature);
-  const colorScale = d3.scaleSequential(d3.interpolateSpectral)
-    .domain([minTemp, maxTemp]); 
-    // this ensures the entire range shows from cool (blue) to warm (red)
+
+  // The color scheme: "RdYlBu" starts with red at t=0, transitions to blue at t=1.
+  // We want min => blue, max => red. Hence domain = [max, min].
+  // That way colorScale(minTemp) => d3.interpolateRdYlBu(1) => blue,
+  // and colorScale(maxTemp) => d3.interpolateRdYlBu(0) => red.
+  // So the scale goes colder=blue -> middle=yellow -> hotter=red.
+  const colorScale = d3.scaleSequential(d3.interpolateRdYlBu)
+    .domain([maxTemp, minTemp]);
 
   /////////////////////////////////////////////////////////////////////////
   // 4.3) CREATE SVG & AXES
@@ -270,14 +274,16 @@ function createHeatmap(data, selectedMice) {
     });
 
   /////////////////////////////////////////////////////////////////////////
-  // 4.7) COLOR LEGEND ON THE RIGHT (FULL RANGE)
+  // 4.7) COLOR LEGEND ON THE RIGHT
   /////////////////////////////////////////////////////////////////////////
+
+  // We'll define the legend scale from cold (min) => hot (max).
+  // But note we've reversed the color scale domain, so we adapt the axis carefully.
+  // We'll show min (blue) at the bottom and max (red) at the top.
   const legendHeight = 200;
-  // Now define domain as [minTemp, maxTemp] in ascending order
   const legendScale = d3.scaleLinear()
-    .domain([minTemp, maxTemp])
+    .domain([minTemp, maxTemp]) // min at bottom, max at top
     .range([legendHeight, 0]); 
-    // top=lowest temp, bottom=highest temp
 
   const legendAxis = d3.axisRight(legendScale)
     .ticks(5)
@@ -289,9 +295,9 @@ function createHeatmap(data, selectedMice) {
     .attr("x1", "0%").attr("y1", "0%")
     .attr("x2", "0%").attr("y2", "100%");
 
-  // We go from top => minTemp, bottom => maxTemp
-  // so 0% => colorScale(minTemp), 100% => colorScale(maxTemp)
-  [minTemp, maxTemp].forEach((t, i) => {
+  // Because our colorScale is domain([maxTemp, minTemp]),
+  // we want offset 0 => colorScale(maxTemp)=red, offset 100% => colorScale(minTemp)=blue
+  [maxTemp, minTemp].forEach((t, i) => {
     gradient.append("stop")
       .attr("offset", i === 0 ? "0%" : "100%")
       .attr("stop-color", colorScale(t));
@@ -318,8 +324,6 @@ function createHeatmap(data, selectedMice) {
   /////////////////////////////////////////////////////////////////////////
   // 4.8) BRUSH FOR HORIZONTAL ZOOM (+ STORED INITIAL DOMAIN & RESET)
   /////////////////////////////////////////////////////////////////////////
-
-  // Save the initial domain for reset
   const initialDomain = xScale.domain();
 
   const brush = d3.brushX()
